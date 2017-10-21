@@ -1,10 +1,11 @@
 local fs = require('fs')
-local base64 = require('base64')
+local ssl = require('openssl')
 local class = require('class')
 local enums = require('enums')
 
 local permission = enums.permission
-local encode = base64.encode
+local actionType = enums.actionType
+local base64 = ssl.base64
 local readFileSync = fs.readFileSync
 local classes = class.classes
 local isInstance = class.isInstance
@@ -33,6 +34,8 @@ local function int(obj)
 		end
 	elseif t == 'number' then
 		return format('%i', obj)
+	elseif isInstance(obj, classes.Date) then
+		return obj:toSnowflake()
 	end
 end
 
@@ -72,8 +75,24 @@ function Resolver.roleId(obj)
 	return int(obj)
 end
 
+function Resolver.emojiId(obj)
+	if isInstance(obj, classes.Emoji) then
+		return obj.id
+	elseif isInstance(obj, classes.Reaction) then
+		return obj.emojiId
+	end
+	return tostring(obj)
+end
+
 function Resolver.guildId(obj)
 	if isInstance(obj, classes.Guild) then
+		return obj.id
+	end
+	return int(obj)
+end
+
+function Resolver.entryId(obj)
+	if isInstance(obj, classes.AuditLogEntry) then
 		return obj.id
 	end
 	return int(obj)
@@ -95,13 +114,9 @@ end
 
 function Resolver.emoji(obj)
 	if isInstance(obj, classes.Emoji) then
-		return obj.name .. ':' .. obj.id
+		return obj.hash
 	elseif isInstance(obj, classes.Reaction) then
-		if obj.emojiId then
-			return obj.emojiName .. ':' .. obj.emojiId
-		else
-			return obj.emojiName
-		end
+		return obj.emojiHash
 	end
 	return tostring(obj)
 end
@@ -131,6 +146,17 @@ function Resolver.permission(obj)
 	return n
 end
 
+function Resolver.actionType(obj)
+	local t = type(obj)
+	local n = nil
+	if t == 'string' then
+		n = actionType[obj]
+	elseif t == 'number' then
+		n = actionType(obj) and obj
+	end
+	return n
+end
+
 function Resolver.base64(obj)
 	if type(obj) == 'string' then
 		if obj:find('data:.*;base64,') == 1 then
@@ -140,7 +166,7 @@ function Resolver.base64(obj)
 		if not data then
 			return nil, err
 		end
-		return 'data:;base64,' .. encode(data)
+		return 'data:;base64,' .. base64(data)
 	end
 	return nil
 end

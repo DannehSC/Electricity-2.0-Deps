@@ -1,6 +1,31 @@
 # Changelog
 
-## 2.0.0 - Not Finished
+## 2.1.0
+- Added Reaction.emojiHash and Emoji.hash properties
+- Added support for emoji endpoints and methods:
+	- Emoji:setName
+	- Emoji:delete
+	- Guild:createEmoji
+- Date instances are now valid Snowflake ID resolvables
+- Added `textChannels` and `voiceChannels` filtered iterables to `GuildCategoryChannel`
+- Added support for system channels
+	- Guild.systemChannel
+	- Guild.systemChannelId
+	- Guild:setSystemChannel
+
+
+## 2.0.1
+- Added missing `Message.oldContent`, which was intended for 2.0.0
+- `GuildTextChannel:bulkDelete` can now handle a minimum of 1 message instead of 2
+- `Iterable:toArray(fn)` is now an acceptable overload for `Iterable:toArray(sortBy, fn)`
+- Switched the base64 resolver to use OpenSSL instead of a pure Lua version
+- Client owner data is now cached on authentication (still named gateway.json)
+- Authentication cache now expires after 1 hour instead of 24 hours
+- Reactions are now properly uncached when MESSAGE_REACTIONS_REMOVE_ALL occurs
+- JSON `null` is now correctly handled for `Invites` and `Reactions`
+
+
+## 2.0.0
 
 The major goals of this rewrite were to add new or missing features and to improve consistency and efficiency. A lot of changes were made to Discordia to achieve these goals; many of them are breaking. Please read the following changelog carefully and update your applications accordingly.
 
@@ -34,7 +59,6 @@ The major goals of this rewrite were to add new or missing features and to impro
 - Added various helper functions: `isClass`, `isObject`, `isSubclass`, `isInstance`, `type`, `profile`
 - Calling `class` now returns only a class and getter table (instead of a class table and property, method, and cache constructors)
 - Changed the "private" `class.__classes` table to `class.classes`
-- Added a default `__pairs` metanmethod for class instances, an iterator for all explicitly "gettable" object properties
 
 #### Caches and Iterables
 - Properties and methods that access caches have been removed and replaced by caches that can be directly accessed
@@ -45,9 +69,9 @@ The major goals of this rewrite were to add new or missing features and to impro
 - The `Iterable` mixin provides methods such as `get`, `find`, `forEach`, etc
 - Classes that implement the `Iterable` mixin are:
 	- `Cache` - for main Discord objects (eg: guilds, channels, roles)
-	- `SecondaryCache` - for select references to objects that are stored in `WeakCaches` (eg: pinned messages, reaction users)
+	- `SecondaryCache` - for select references to objects that are cached elsewhere (eg: pinned messages)
 	- `ArrayIterable` - for objects that are better represented in an ordered form, and sometimes mapped (eg: member roles, mentioned users)
-	- `WeakCache` - for objects that are either never directly deleted or are temporarily referenced from other locations (eg: client users, channel messages)
+	- `WeakCache` - for objects that are either never directly deleted or are temporarily referenced from other locations (eg: channel messages)
 
 #### New Container Classes
 - `Ban` - represents a guild ban (provides a user object and reason)
@@ -103,13 +127,13 @@ The major goals of this rewrite were to add new or missing features and to impro
 - Added `relationshipUpdate` event
 - Added `info` event
 - Added `debug` event
-- Added group channel handling to `channelCreate`, `channelUpdate`, and `channelDelete`
+- Added group channel and category handling to `channelCreate`, `channelUpdate`, and `channelDelete`
 - Renamed `resumed` event to `shardResumed`
 - Removed `guildCreateUnavailable` event (check `guild.unavailable` on `guildCreate` instead)
 - Removed `typingStartUncached` event
-- Added `oldContent` as a second parameter to `messageUpdate` event
+- Removed `mute` and `deaf` arguments from voice events (check `member.muted` and `member.deafened` instead)
 - Changed `reactionAdd` and `reactionRemove` parameters from `(reaction, user)` to `(reaction, userId)`
-- Changed `reactionAddUncached` and `reactionRemoveUncached` parameters from raw `(data)` table to `(channel, messageId, userId)`
+- Changed `reactionAddUncached` and `reactionRemoveUncached` parameters from raw `(data)` table to `(channel, messageId, hash, userId)`
 - Changed `typingStart` parameters from `(user, channel, timestamp)` to raw `(userId, channelId, timestamp)` table
 - Changed `heartbeat` parameters from `(sequence, latency, shardId)` to `(shardId, latency)`
 - Changed `raw` parameters from `(tbl, str)` to `(str)` where `str` is a JSON string
@@ -174,9 +198,12 @@ The major goals of this rewrite were to add new or missing features and to impro
 - Added `__eq` metamethod, which uses new `__hash` method(s)
 
 #### GuildChannel
+- Added `category` property
+- Added `setCategory` method
 - Replaced `invites` property with `getInvites` method
 - Replaced `permissionOverwrites` properties and methods with directly accessible `Cache` property
 - Replaced `setPosition` method with `moveUp` and `moveDown` methods
+- Changed `createInvite` parameters from `(maxAge, maxUses, temporary, unique)` to `(payload)`
 
 #### Snowflake
 - Added `__hash` method, which returns `id` property
@@ -216,6 +243,8 @@ The major goals of this rewrite were to add new or missing features and to impro
 - Added optional `reason` argument to `kickUser`, `banUser`, and `unbanUser` methods
 - Added `sync` method
 - Added `requestMembers` method
+- Added `categories` `Cache` property
+- Added `createCategory` method
 - Renamed `iconUrl` to `iconURL`
 - Renamed `setAfkTimeout` to `setAFKTimeout`
 - Renamed `setAfkChannel` to `setAFKChannel`
@@ -240,16 +269,20 @@ The major goals of this rewrite were to add new or missing features and to impro
 - Added stand-alone `getChannel` method, which accepts only a channelId-resolvable
 - Added stand-alone `getMember` method, which accepts only a userId-resolvable
 
+#### GuildCategoryChannel
+- New class! See documentation.
+
 #### GuildTextChannel
 - Changed `bulkDelete` behavior (see documentation)
 - Moved `mentionString` from `GuildChannel` to `Channel`
 - Replaced `webhooks` property with `getWebhooks` method
-- Changed `createInvite` parameters from `(maxAge, maxUses, temporary, unique)` to `(payload)`
 - Added `enableNSFW` and `disableNSFW` methods
 - Added `nsfw` property
 
 #### GuildVoiceChannel
-- TODO
+- Removed `join` and `leave` methods until voice is re-written
+- Removed `connection` property until voice is re-written
+- Removed `members` properties and methods until voice is re-written
 
 #### Invite
 - Added `__hash` method, which returns `code` property
@@ -289,7 +322,8 @@ The major goals of this rewrite were to add new or missing features and to impro
 - Replaced `mentionedUsers` properties and methods with directly accessible `ArrayIterable` property
 - Replaced `mentionedRoles` properties and methods with directly accessible `ArrayIterable` property
 - Replaced `mentionedChannels` properties and methods with directly accessible `ArrayIterable` property
-- Removed `oldContent` property (use `messageUpdate` event instead)
+- Changed `oldContent` property from a string to a table of strings
+- Removed `editedTimestamp` property (use `oldContent` keys instead)
 - Moved `Message:getReactionUsers(emoji)` to `Reaction:getUsers()`
 - Added `type` property
 - Added `mentionsEveryone` property
@@ -375,7 +409,7 @@ The major goals of this rewrite were to add new or missing features and to impro
 - New class! See documentation.
 
 #### Buffer
-- TODO
+- Removed class until voice is re-written
 
 #### Clock
 - No public changes
@@ -417,9 +451,6 @@ The major goals of this rewrite were to add new or missing features and to impro
 
 #### Time
 - New class! See documentation.
-
-### Internal Changes
-- TODO
 
 
 ## 1.5.1

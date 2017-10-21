@@ -1,15 +1,11 @@
 local Snowflake = require('containers/abstract/Snowflake')
+local enums = require('enums')
 
 local format = string.format
+local channelType = enums.channelType
 
 local Channel, get = require('class')('Channel', Snowflake)
 
---[[
-@abc Channel x Snowflake
-
-Abstract base class that defines the base methods and/or properties for all
-Discord channel types.
-]]
 function Channel:__init(data, parent)
 	Snowflake.__init(self, data, parent)
 end
@@ -27,28 +23,32 @@ end
 function Channel:_delete()
 	local data, err = self.client._api:deleteChannel(self._id)
 	if data then
+		local cache
+		local t = self._type
+		if t == channelType.text then
+			cache = self._parent._text_channels
+		elseif t == channelType.private then
+			cache = self._parent._private_channels
+		elseif t == channelType.group then
+			cache = self._parent._group_channels
+		elseif t == channelType.voice then
+			cache = self._parent._voice_channels
+		elseif t == channelType.category then
+			cache = self._parent._categories
+		end
+		if cache then
+			cache:_delete(self._id)
+		end
 		return true
 	else
 		return false, err
 	end
 end
 
---[[
-@property type: number
-
-The channel type. See the `channelType` enumeration for a human-readable
-representation.
-]]
 function get.type(self)
 	return self._type
 end
 
---[[
-@property mentionString: string
-
-A string that, when included in a message content, may resolve as a link to
-a channel in the official Discord client.
-]]
 function get.mentionString(self)
 	return format('<#%s>', self._id)
 end

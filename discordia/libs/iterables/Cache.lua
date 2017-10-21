@@ -1,10 +1,10 @@
+local json = require('json')
 local Iterable = require('iterables/Iterable')
+
+local null = json.null
 
 local Cache = require('class')('Cache', Iterable)
 
---[[
-@class Cache x Iterable
-]]
 function Cache:__init(array, constructor, parent)
 	local objects = {}
 	for _, data in ipairs(array) do
@@ -15,6 +15,10 @@ function Cache:__init(array, constructor, parent)
 	self._objects = objects
 	self._constructor = constructor
 	self._parent = parent
+end
+
+function Cache:__pairs()
+	return next, self._objects
 end
 
 function Cache:__len()
@@ -43,7 +47,7 @@ local function hash(data)
 	elseif data.user then -- members
 		return data.user.id
 	elseif data.emoji then -- reactions
-		return data.emoji.id or data.emoji.name
+		return data.emoji.id ~= null and data.emoji.id or data.emoji.name
 	elseif data.code then -- invites
 		return data.code
 	else
@@ -103,26 +107,10 @@ function Cache:_load(array, update)
 	end
 end
 
---[[
-@method get
-@param k: *
-@ret *
-
-Returns an individual object by key, where the key should match the result of
-calling `__hash` on the contained objects. Unlike the default version, this
-method operates with O(1) complexity.
-]]
 function Cache:get(k)
 	return self._objects[k]
 end
 
---[[
-@method iter
-@ret function
-
-Returns an iterator that returns all contained object. The order of the objects
-is not guaranteed.
-]]
 function Cache:iter()
 	local objects, k, obj = self._objects
 	return function()

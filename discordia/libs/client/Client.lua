@@ -44,7 +44,7 @@ local defaultOptions = {
 	firstShard = 0,
 	lastShard = -1,
 	largeThreshold = 100,
-	fetchMembers = false,
+	cacheAllMembers = false,
 	autoReconnect = true,
 	compress = true,
 	bitrate = 64000,
@@ -83,17 +83,6 @@ end
 
 local Client, get = require('class')('Client', Emitter)
 
---[[
-@class Client x Emitter
-@param [options]: table
-
-The main point of entry into a Discordia application. All data relevant to
-Discord are accessible through a client instance or its child objects after a
-connection to Discord is established with the `run` method. In other words,
-client data should not be expected and most client methods should not be called
-until after the `ready` event is received. Base emitter methods may be called
-at any time.
-]]
 function Client:__init(options)
 	Emitter.__init(self)
 	options = parseOptions(options)
@@ -101,11 +90,12 @@ function Client:__init(options)
 	self._shards = {}
 	self._api = API(self)
 	self._mutex = Mutex()
-	self._users = WeakCache({}, User, self)
+	self._users = Cache({}, User, self)
 	self._guilds = Cache({}, Guild, self)
 	self._group_channels = Cache({}, GroupChannel, self)
 	self._private_channels = Cache({}, PrivateChannel, self)
 	self._relationships = Cache({}, Relationship, self)
+	self._webhooks = WeakCache({}, Webhook, self) -- used for audit logs
 	self._logger = Logger(options.logLevel, options.dateTime, options.logFile)
 	self._channel_map = {}
 end
@@ -134,45 +124,72 @@ local function run(self, token)
 	end
 	self._user = users:_insert(user)
 
-	if user.bot then
-		local app, err2 = api:getCurrentApplicationInformation()
-		if not app then
-			return self:error('Could not get application information: ' .. err2)
-		end
-		self._owner = users:_insert(app.owner)
-	else
-		self._owner = self._user
-	end
-
 	self:info('Authenticated as %s#%s', user.username, user.discriminator)
 
-	local url, count
+	local now = time()
+	local url, count, owner
 
 	local cache = readFileSync('gateway.json')
 	cache = cache and decode(cache)
 
 	if cache then
 		local d = cache[user.id]
-		if d and difftime(time(), d.timestamp) < CACHE_AGE then
-			url, count = cache.url, d.shards or 1
+		if d and difftime(now, d.timestamp) < CACHE_AGE then
+			url = cache.url
+			if user.bot then
+				count = d.shards
+				owner = d.owner
+			else
+				count = 1
+				owner = user
+			end
 		end
 	else
 		cache = {}
 	end
 
-	if not url then
-		local d = user.bot and api:getGatewayBot() or api:getGateway()
-		if d then
-			url, count = d.url, d.shards or 1
-			cache.url = url
-			cache[user.id] = {timestamp = time(), shards = d.shards}
-			writeFileSync('gateway.json', encode(cache))
+	if not url or not owner then
+
+		if user.bot then
+
+			local gateway, err2 = api:getGatewayBot()
+			if not gateway then
+				return self:error('Could not get gateway: ' .. err2)
+			end
+
+			local app, err3 = api:getCurrentApplicationInformation()
+			if not app then
+				return self:error('Could not get application information: ' .. err3)
+			end
+
+			url = gateway.url
+			count = gateway.shards
+			owner = app.owner
+
+			cache[user.id] = {owner = owner, shards = count, timestamp = now}
+
+		else
+
+			local gateway, err2 = api:getGateway()
+			if not gateway then
+				return self:error('Could not get gateway: ' .. err2)
+			end
+
+			url = gateway.url
+			count = 1
+			owner = user
+
+			cache[user.id] = {timestamp = now}
+
 		end
+
+		cache.url = url
+
+		writeFileSync('gateway.json', encode(cache))
+
 	end
 
-	if not url then
-		return self:error('Could not connect to gateway (no URL found)')
-	end
+	self._owner = users:_insert(owner)
 
 	if options.shardCount > 0 then
 		if count ~= options.shardCount then
@@ -214,29 +231,11 @@ local function run(self, token)
 
 end
 
---[[
-@method run
-@param token: string
-@param [presence]: table
-
-Authenticates the current user via HTTPS and launches as many WSS gateway
-shards as are required or requested. By using coroutines that are automatically
-managed by Luvit libraries and a libuv event loop, multiple clients per process
-and multiple shards per client can operate concurrently. This should be the last
-method called after all other code and event handlers have been initialized.
-]]
 function Client:run(token, presence)
 	self._presence = presence or {}
 	return wrap(run)(self, token)
 end
 
---[[
-@method stop
-@tags ws
-
-Disconnects all shards and effectively stop their loops. This does not
-empty any data that the client may have cached.
-]]
 function Client:stop()
 	for _, shard in pairs(self._shards) do
 		shard:disconnect()
@@ -254,44 +253,15 @@ function Client:_modify(payload)
 	end
 end
 
---[[
-@method setUsername
-@tags http
-@param username: string
-@ret boolean
-
-Sets the client's username. This must be between 2 and 32 characters in length.
-This does not change the application name.
-]]
 function Client:setUsername(username)
 	return self:_modify({username = username or null})
 end
 
---[[
-@method setAvatar
-@tags http
-@param avatar: Base64 Resolveable
-@ret boolean
-
-Sets the client's avatar. To remove the avatar, pass `nil`. This does not change
-the application image.
-]]
 function Client:setAvatar(avatar)
 	avatar = avatar and Resolver.base64(avatar)
 	return self:_modify({avatar = avatar or null})
 end
 
---[[
-@method createGuild
-@tags http
-@param name: string
-@ret boolean
-
-Creates a new guild. The name must be between 2 and 100 characters in length.
-This method may not work if the current user is in too many guilds. Note that
-this does not return the created guild object; listen for the corresponding
- `guildCreate` event if you need the object.
-]]
 function Client:createGuild(name)
 	local data, err = self._api:createGuild({name = name})
 	if data then
@@ -301,13 +271,6 @@ function Client:createGuild(name)
 	end
 end
 
---[[
-@method createGroupChannel
-@tags http
-@ret GroupChannel
-
-Creates a new group channel. This method is only available for user accounts.
-]]
 function Client:createGroupChannel()
 	local data, err = self._api:createGroupDM()
 	if data then
@@ -317,16 +280,6 @@ function Client:createGroupChannel()
 	end
 end
 
---[[
-@method getWebhook
-@tags http
-@param id: string
-@ret Webhook
-
-Gets a webhook object by ID. This always makes an HTTP request to obtain the
-object, which is a static copy of the server object; it is not automatically
-updated via gateway events.
-]]
 function Client:getWebhook(id)
 	local data, err = self._api:getWebhook(id)
 	if data then
@@ -336,16 +289,6 @@ function Client:getWebhook(id)
 	end
 end
 
---[[
-@method getInvite
-@tags http
-@param code: string
-@ret Invite
-
-Gets an invite object by code. This always makes an HTTP request to obtain the
-object, which is a static copy of the server object; it is not automatically
-updated via gateway events.
-]]
 function Client:getInvite(code)
 	local data, err = self._api:getInvite(code)
 	if data then
@@ -355,17 +298,6 @@ function Client:getInvite(code)
 	end
 end
 
---[[
-@method getUser
-@tags http
-@param id: User ID Resolveable
-@ret User
-
-Gets a user object by ID. If the object is already cached, then the cached
-object will be returned; otherwise, an HTTP request is made. Under circumstances
-which should be rare, the user object may be an old version, not updated by
-gateway events.
-]]
 function Client:getUser(id)
 	id = Resolver.userId(id)
 	local user = self._users:get(id)
@@ -381,86 +313,40 @@ function Client:getUser(id)
 	end
 end
 
---[[
-@method getGuild
-@param id: Guild ID Resolveable
-@ret Guild
-
-Gets a guild object by ID. The current user must be in the guild and the client
-must be running the appropriate shard that serves this guild. This method never
-makes an HTTP request to obtain a guild.
-]]
 function Client:getGuild(id)
 	id = Resolver.guildId(id)
 	return self._guilds:get(id)
 end
 
---[[
-@method getChannel
-@param id: Channel ID Resolveable
-@ret Channel
-
-Gets a channel object by ID. For guild channels, the current user must be in the
-channel's guild and the client must be running the appropriate shard that serves
-the channel's guild.
-
-For private channels, the channel must have been previously opened and cached.
-If the channel is not cached, `User:getPrivateChannel` should be used instead.
-]]
 function Client:getChannel(id)
 	id = Resolver.channelId(id)
 	local guild = self._channel_map[id]
 	if guild then
-		return guild._text_channels:get(id) or guild._voice_channels:get(id)
+		return guild._text_channels:get(id) or guild._voice_channels:get(id) or guild._categories:get(id)
 	else
 		return self._private_channels:get(id) or self._group_channels:get(id)
 	end
 end
 
---[[
-@method listVoiceRegions
-@tags http
-@ret table
-
-Returns a raw data table that contains a list of voice regions as provided by
-Discord, with no additional parsing.
-]]
 function Client:listVoiceRegions()
 	return self._api:listVoiceRegions()
 end
 
---[[
-@method getConnections
-@tags http
-@ret table
-
-Returns a raw data table that contains a list of connections as provided by
-Discord, with no additional parsing.
-]]
 function Client:getConnections()
 	return self._api:getUsersConnections()
 end
 
 local function updateStatus(self)
-	local shards = self._shards
 	local presence = self._presence
 	presence.afk = presence.afk or null
 	presence.game = presence.game or null
 	presence.since = presence.since or null
 	presence.status = presence.status or null
-	for i = 0, self._shard_count - 1 do
-		shards[i]:updateStatus(presence)
+	for _, shard in pairs(self._shards) do
+		shard:updateStatus(presence)
 	end
 end
 
---[[
-@method setStatus
-@tags ws
-@param status: string
-
-Sets the current users's status on all shards that are managed by this client.
-Valid statuses are `online`, `idle`, `dnd`, and `invisible`.
-]]
 function Client:setStatus(status)
 	if type(status) == 'string' then
 		self._presence.status = status
@@ -476,16 +362,6 @@ function Client:setStatus(status)
 	return updateStatus(self)
 end
 
---[[
-@method setGame
-@tags ws
-@param game: string|table
-
-Sets the current users's game on all shards that are managed by this client. If
-a string is passed, it is treated as the game name. If a table is passed, it
-must have a `name` field and may optionally have a `url` field. Pass `nil` to
-remove the game status.
-]]
 function Client:setGame(game)
 	if type(game) == 'string' then
 		game = {name = game, type = gameType.default}
@@ -506,14 +382,6 @@ function Client:setGame(game)
 	return updateStatus(self)
 end
 
---[[
-@method setAFK
-@tags ws
-@param afk: boolean
-
-Set the current user's AFK status on all shards that are managed by this client.
-This generally applies to user accounts and their push notifications.
-]]
 function Client:setAFK(afk)
 	if type(afk) == 'boolean' then
 		self._presence.afk = afk
@@ -523,110 +391,46 @@ function Client:setAFK(afk)
 	return updateStatus(self)
 end
 
---[[
-@property shardCount: number|nil
-
-The number of shards that this client is managing.
-]]
 function get.shardCount(self)
 	return self._shard_count
 end
 
---[[
-@property user: User|nil
-
-User object representing the current user.
-]]
 function get.user(self)
 	return self._user
 end
 
---[[
-@property owner: User|nil
-
-User object representing the current user's owner.
-]]
 function get.owner(self)
 	return self._owner
 end
 
---[[
-@property verified: boolean|nil
-
-Whether the current user's owner's account is verified.
-]]
 function get.verified(self)
 	return self._user and self._user._verified
 end
 
---[[
-@property mfaEnabled: boolean|nil
-
-Whether the current user's owner's account has multi-factor (or two-factor)
-authentication enabled.
-]]
 function get.mfaEnabled(self)
 	return self._user and self._user._verified
 end
 
---[[
-@property email: string|nil
-
-The current user's owner's account's email address (user-accounts only).
-]]
 function get.email(self)
 	return self._user and self._user._email
 end
 
---[[
-@property guilds: Cache
-
-An iterable cache of all guilds that are visible to the client. Note that the
-guilds present here correspond to which shards the client is managing. If all
-shards are managed by one client, then all guilds will be present.
-]]
 function get.guilds(self)
 	return self._guilds
 end
 
---[[
-@property user: WeakCache
-
-An iterable weak cache of all users that are visible to the client. Users that
-are not referenced elsewhere are eventually garbage collected. To access a user
-that may exist but is not cached, use `Client:getUser`.
-]]
 function get.users(self)
 	return self._users
 end
 
---[[
-@property privateChannels: Cache
-
-An iterable cache of all private channels that are visible to the client. The
-channel must exist and must be open for it to be cached here. To access a
-private channel that may exist but is not cached, `User:getPrivateChannel`.
-]]
 function get.privateChannels(self)
 	return self._private_channels
 end
 
---[[
-@property groupChannels: Cache
-
-An iterable cache of all group channels that are visible to the client. Only
-user-accounts should have these.
-]]
 function get.groupChannels(self)
 	return self._group_channels
 end
 
---[[
-@property relationships: Cache
-
-An iterable cache of all relationships that are visible to the client. Only
-user-accounts should have these.
-]]
 function get.relationships(self)
 	return self._relationships
 end

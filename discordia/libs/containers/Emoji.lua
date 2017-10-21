@@ -1,16 +1,11 @@
 local Snowflake = require('containers/abstract/Snowflake')
 local ArrayIterable = require('iterables/ArrayIterable')
+local json = require('json')
 
 local format = string.format
 
 local Emoji, get = require('class')('Emoji', Snowflake)
 
---[[
-@class Emoji
-
-Represents a custom emoji object usable in message content and reactions.
-Standard unicode emojis do not have a class; they are just strings.
-]]
 function Emoji:__init(data, parent)
 	Snowflake.__init(self, data, parent)
 	return self:_loadMore(data)
@@ -32,63 +27,61 @@ function Emoji:_loadMore(data)
 	end
 end
 
---[[
-@property name: string
-]]
+function Emoji:_modify(payload)
+	local data, err = self.client._api:modifyGuildEmoji(self._parent._id, self._id, payload)
+	if data then
+		self:_load(data)
+		return true
+	else
+		return false, err
+	end
+end
+
+function Emoji:setName(name)
+	return self:_modify({name = name or json.null})
+end
+
+function Emoji:delete()
+	local data, err = self.client._api:deleteGuildEmoji(self._parent._id, self._id)
+	if data then
+		local cache = self._parent._emojis
+		if cache then
+			cache:_delete(self._id)
+		end
+		return true
+	else
+		return false, err
+	end
+end
+
 function get.name(self)
 	return self._name
 end
 
---[[
-@property guild: Guild
-]]
 function get.guild(self)
 	return self._parent
 end
 
---[[
-@property mentionString: string
-
-A string that, when included in a message content, may resolve as an emoji image
-in the official Discord client.
-]]
 function get.mentionString(self)
-	return format('<:%s:%s>', self._name, self._id)
+	return format('<:%s>', self.hash)
 end
 
---[[
-@property url: string
-
-The URL that can be used to view a full version of the emoji.
-]]
 function get.url(self)
 	return format('https://cdn.discordapp.com/emojis/%s.png', self._id)
 end
 
---[[
-@property managed: boolean
-
-Whether this emoji is managed by an integration such as Twitch or YouTube.
-]]
 function get.managed(self)
 	return self._managed
 end
 
---[[
-@property requireColons: boolean
-
-Whether this emoji requires colons to be used in the official Discord client.
-]]
 function get.requireColons(self)
 	return self._require_colons
 end
 
---[[
-@property roles: ArrayIterable
+function get.hash(self)
+	return self._name .. ':' .. self._id
+end
 
-An iterable array of roles that may be required to use this emoji, generally
-related to integration-managed emojis. Object order is not guaranteed.
-]]
 function get.roles(self)
 	if not self._roles then
 		local roles = self._parent._roles
