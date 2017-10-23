@@ -1,3 +1,4 @@
+local json=require('json')
 local processQuery=require('./query.lua')
 local cmanager=require('./coroutinemanager.lua')
 local newReql
@@ -85,8 +86,8 @@ function newReql(conn)
 		assert(not reql.ran,'ReQL instance already ran.')
 		--assert(tab.id~=nil,'argument \'id\' not passed to inOrRe')
 		assert(cmanager:isCoro(),'reql.inOrRe not ran in coroutine.')
-		local exists=newReql(conn).db(reql._database).table(reql._table).get(tab.id).run()
-		if exists then
+		local exists=newReql(conn).db(reql._database).table(reql._table).get(tab.id).run({raw=true})
+		if exists~=json.null then
 			reql.replace(tab)
 		else
 			reql.insert(tab)
@@ -99,8 +100,8 @@ function newReql(conn)
 		assert(not reql.ran,'ReQL instance already ran.')
 		--assert(tab.id~=nil,'argument \'id\' not passed to inOrUp')
 		assert(cmanager:isCoro(),'reql.inOrUp not ran in coroutine.')
-		local exists=newReql(conn).db(reql._database).table(reql._table).get(tab.id).run()
-		if exists then
+		local exists=newReql(conn).db(reql._database).table(reql._table).get(tab.id).run({raw=true})
+		if exists~=json.null then
 			reql.update(tab)
 		else
 			reql.insert(tab)

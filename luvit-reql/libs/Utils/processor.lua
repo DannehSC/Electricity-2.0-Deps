@@ -31,15 +31,18 @@ function processor.processData(data)
 	respn=tonumber(respn)
 	if respn==1 then
 		rest=data:sub(13)
-		processor.cbs[token](json.decode(rest).r)
-		processor.cbs[token]=nil
+		local dat
+		dat=json.decode(rest).r
+		processor.cbs[token].f(dat)
 	elseif respn==2 then
 		if not buffers[token]then
 			buffers[token]=newBuffer('')
 		end
 		local buffer=buffers[token]
 		buffer:add(data:sub(13))
-		processor.cbs[token](json.decode(buffer.data).r)
+		local dat
+		dat=json.decode(buffer.data).r
+		processor.cbs[token].f(dat)
 		processor.cbs[token]=nil
 		buffers[token]=nil
 	elseif respn==3 then
@@ -52,7 +55,7 @@ function processor.processData(data)
 		local ec=errcodes[respn]
 		local err=ec.f(ec.t)
 		logger.warn.format('Error encountered. Error code: '..respn..' | Error info: '..tostring(err))
-		processor.cbs[token](nil,err,json.decode(data:sub(13)))
+		processor.cbs[token].f(nil,err,json.decode(data:sub(13)))
 	else
 		logger.warn.format(string.format('Unknown response: %s',respn))
 	end

@@ -29,7 +29,7 @@ local function encode(reql)
 		str=fmt('[%s, [%s, "%s"]]',term.get,str,reql._get)
 	end
 	if reql._insert then
-		local js=json.encode(reql._insert)
+		local js=json.encode({term.datum,reql._insert})
 		str=fmt('[%s, [%s, %s]]',term.insert,str,js)
 	end
 	if reql._replace then
