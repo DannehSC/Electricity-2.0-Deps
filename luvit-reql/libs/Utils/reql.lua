@@ -87,7 +87,7 @@ function newReql(conn)
 		--assert(tab.id~=nil,'argument \'id\' not passed to inOrRe')
 		assert(cmanager:isCoro(),'reql.inOrRe not ran in coroutine.')
 		local exists=newReql(conn).db(reql._database).table(reql._table).get(tab.id).run({raw=true})
-		if exists~=json.null then
+		if exists==nil or exists==json.null or exists[1]==nil then
 			reql.replace(tab)
 		else
 			reql.insert(tab)
@@ -101,7 +101,7 @@ function newReql(conn)
 		--assert(tab.id~=nil,'argument \'id\' not passed to inOrUp')
 		assert(cmanager:isCoro(),'reql.inOrUp not ran in coroutine.')
 		local exists=newReql(conn).db(reql._database).table(reql._table).get(tab.id).run({raw=true})
-		if exists~=json.null then
+		if exists==nil or exists==json.null or exists[1]==nil then
 			reql.update(tab)
 		else
 			reql.insert(tab)
