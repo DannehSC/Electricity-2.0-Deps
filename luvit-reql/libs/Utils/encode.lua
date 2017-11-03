@@ -44,6 +44,9 @@ local function encode(reql)
 		local js=json.encode(reql._data.filter)
 		str=fmt('[%s, [%s, %s]]',term.filter,str,js)
 	end
+	if reql._data.changes then
+		str=fmt('[%s, [%s]]',term.changes,str)
+	end
 	if reql._data.js then
 		str=fmt('[%s, ["%s"]]',term.js,reql._data.js)
 	end

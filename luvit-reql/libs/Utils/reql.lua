@@ -93,7 +93,7 @@ function newReql(conn)
 			reql.insert(tab)
 		else
 			local id=tab.id
-			tab.id=nil
+			--tab.id=nil
 			reql.get(id).replace(tab)
 		end
 		return reql
@@ -112,6 +112,13 @@ function newReql(conn)
 			tab.id=nil
 			reql.get(id).update(tab)
 		end
+		return reql
+	end
+	function reql.changes()
+		assert(reql._data.usable,'ReQL instance unusable, please run or start a new instance.')
+		assert(not reql.ran,'ReQL instance already ran.')
+		reql._data.usable=false
+		reql._data.changes=true
 		return reql
 	end
 	function reql.indexCreate(name)
@@ -205,7 +212,7 @@ function newReql(conn)
 		reql._data.raw=tab.raw
 		local token=reql.conn._getToken()
 		local x,is=callback,cmanager:isCoro()
-		if is then
+		if is and not reql._data.changes then
 			x=function(...)
 				cmanager:resume(token,...)
 			end

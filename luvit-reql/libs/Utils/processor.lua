@@ -43,7 +43,9 @@ function processor.processData(data)
 			dat=json.decode(rest).r
 		end
 		todat.f(dat)
-		processor.cbs[token]=nil
+		if not todat.keepAlive then
+			processor.cbs[token]=nil
+		end
 	elseif respn==2 then
 		if not buffers[token]then
 			buffers[token]=newBuffer('')
@@ -62,7 +64,9 @@ function processor.processData(data)
 			dat=json.decode(buffer.data).r
 		end
 		todat.f(dat)
-		processor.cbs[token]=nil
+		if not todat.keepAlive then
+			processor.cbs[token]=nil
+		end
 		buffers[token]=nil
 	elseif respn==3 then
 		if not buffers[token]then
