@@ -219,7 +219,9 @@ local function run(self, token)
 		self:info('Launching shards %i through %i (%i out of %i)...', first, last, d, count)
 	end
 
-	self._shard_count = count
+	self._total_shard_count = count
+	self._shard_count = last - first
+
 	for id = first, last do
 		self._shards[id] = Shard(id, self)
 	end
@@ -382,6 +384,21 @@ function Client:setGame(game)
 	return updateStatus(self)
 end
 
+function Client:setActivity(t, name, url) -- NOTE: may not be the final version
+	local game
+	if type(t) == 'number' and type(name) == 'string' then
+		game = {
+			name = name,
+			type = t,
+			url = type(url) == 'string' and url or nil,
+		}
+	else
+		game = null
+	end
+	self._presence.game = game
+	return updateStatus(self)
+end
+
 function Client:setAFK(afk)
 	if type(afk) == 'boolean' then
 		self._presence.afk = afk
@@ -393,6 +410,10 @@ end
 
 function get.shardCount(self)
 	return self._shard_count
+end
+
+function get.totalShardCount(self)
+	return self._total_shard_count
 end
 
 function get.user(self)

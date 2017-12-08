@@ -23,6 +23,7 @@ local BOUNDARY3 = BOUNDARY2 .. '--'
 
 local JSON = 'application/json'
 local MULTIPART = f('multipart/form-data;boundary=%s', BOUNDARY1)
+local USER_AGENT = f('DiscordBot (%s, %s)', package.homepage, package.version)
 
 local majorRoutes = {guilds = true, channels = true, webhooks = true}
 local payloadRequired = {PUT = true, PATCH = true, POST = true}
@@ -53,9 +54,8 @@ end
 local function route(method, endpoint)
 
 	-- special case for reactions
-	local _, n = endpoint:find('reactions')
-	if n then
-		endpoint = endpoint:sub(1, n)
+	if endpoint:find('reactions') then
+		return 'reactions'
 	end
 
 	-- remove the ID from minor routes
@@ -110,13 +110,16 @@ local API = require('class')('API')
 
 function API:__init(client)
 	self._client = client
+	self._headers = {
+		{'User-Agent', USER_AGENT}
+	}
 	self._mutexes = setmetatable({}, mutexMeta)
 end
 
 function API:authenticate(token)
 	self._headers = {
 		{'Authorization', token},
-		{'User-Agent', f('DiscordBot (%s, %s)', package.homepage, package.version)},
+		{'User-Agent', USER_AGENT},
 	}
 	return self:getCurrentUser()
 end
@@ -294,9 +297,9 @@ function API:deleteUserReaction(channel_id, message_id, emoji, user_id) -- Messa
 	return self:request("DELETE", endpoint)
 end
 
-function API:getReactions(channel_id, message_id, emoji) -- Reaction:getUsers
+function API:getReactions(channel_id, message_id, emoji, query) -- Reaction:getUsers
 	local endpoint = f(endpoints.CHANNEL_MESSAGE_REACTION, channel_id, message_id, emoji)
-	return self:request("GET", endpoint)
+	return self:request("GET", endpoint, nil, query)
 end
 
 function API:deleteAllReactions(channel_id, message_id) -- Message:clearReactions
