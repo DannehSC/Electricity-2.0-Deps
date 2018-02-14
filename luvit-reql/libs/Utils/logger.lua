@@ -1,63 +1,72 @@
-local emitter = require('./emitty.lua')
-local colorize = require('pretty-print').colorize
+
+local fs = require('fs')
+local emitter = require('./emitter.lua')
+
 local fmt, date = string.format, os.date
+local openSync, writeSync, closeSync = fs.openSync, fs.writeSync, fs.closeSync
+local datetime = '%F %T'
 
-local pat = '%F %T'
-
-local loggerMeta = function(self,...)
-	if self['format'] then
-		return self['format'](...)
-	end
-end
-
-local logger = {
-	err = setmetatable({}, { __call = loggerMeta }),
-	warn = setmetatable({}, { __call = loggerMeta }),
-	info = setmetatable({}, { __call = loggerMeta }),
-	hErr = setmetatable({}, { __call = loggerMeta }),
-	other = setmetatable({}, { __call = loggerMeta }),
-	debug = setmetatable({}, { __call = loggerMeta }),
+local logger = { }
+local types = {
+	[1] = '[INFO]   ',
+	[2] = '[WARNING]',
+	[3] = '[ERROR]  ',
+	[4] = '[DEBUG]  ',
+	[5] = '[H ERROR]',
 }
 
-function logger.err.format(sig, err)
-	sig = sig or '?'
-	print(date(pat) .. ' | ' .. colorize('err', fmt("[FAIL]    | %s", sig)))
-	if err then
-		print(('logger.err.format: 2nd value deprecated.\nData: '..err))
+function write(typeOf, data)
+	if logger._file ~= false then
+		local file
+		if logger._opened == nil then
+			file = openSync(logger._file, 'a')
+		else
+			file = logger._opened
+		end
+		writeSync(file, -1, fmt('%s | %s | %s\n', date(datetime), typeOf, data))
 	end
-	emitter:fire('error', err)
 end
 
-function logger.hErr.format(sig, err)
-	sig = sig or '?'
-	print(date(pat) .. ' | ' .. colorize('err', fmt("[FAIL]    | %s", sig)))
-	if err then
-		print(('logger.hErr.format: 2nd value deprecated.\nData: '..err))
+function logger.setFile(fileName)
+	if logger._opened then
+		closeSync(logger._opened)
 	end
-	error 'See the red print above this.'
+	logger._file = fileName
+	logger.info('Set file to: '..fileName)
 end
 
-function logger.warn.format(sig, dat)
+function logger.err(sig)
 	sig = sig or '?'
-	print(date(pat) .. ' | ' .. fmt(colorize('number','[WARN]    ') .. '| %s', sig))
-	if dat then
-		print(('logger.warn.format: 2nd value deprecated.\nData: '..dat))
-	end
-	emitter:fire('warn', sig, dat)
+	write(types[3], sig)
+	print(date(datetime) .. ' | ' .. fmt('\27[1;31m%s\27[0m | %s', types[3], sig))
+	emitter:fire('error')
 end
 
-function logger.info.format(sig, dat)
+function logger.harderr(sig)
 	sig = sig or '?'
-	print(date(pat) .. ' | ' .. fmt(colorize('userdata','[INFO]    ') .. '| %s', sig))
-	if dat then
-		print(('logger.info.format: 2nd value deprecated.\nData: '..dat))
-	end
-	emitter:fire('info', sig, dat)
+	write(types[5], sig)
+	print(date(datetime) .. ' | ' .. fmt('\27[1;31m%s\27[0m | %s', types[5], sig))
+	process:exit(1)
 end
 
-function logger.debug.format(sig)
+function logger.warn(sig)
 	sig = sig or '?'
-	print(date(pat) .. ' | ' .. fmt(colorize('userdata','[DEBUG]   ') .. '| %s', sig))
+	write(types[2], sig)
+	print(date(datetime) .. ' | ' .. fmt('\27[1;33m%s\27[0m | %s', types[2], sig))
+	emitter:fire('warn', sig)
+end
+
+function logger.info(sig)
+	sig = sig or '?'
+	write(types[1], sig)
+	print(date(datetime) .. ' | ' .. fmt('\27[1;32m%s\27[0m | %s', types[1], sig))
+	emitter:fire('info', sig)
+end
+
+function logger.debug(sig)
+	sig = sig or '?'
+	write(types[4], sig)
+	print(date(datetime) .. ' | ' .. fmt('\27[1;36m%s\27[0m | %s', types[4], sig))
 	emitter:fire('debug', sig)
 end
 

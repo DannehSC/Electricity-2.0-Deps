@@ -97,15 +97,15 @@ function Client:__init(options)
 	self._relationships = Cache({}, Relationship, self)
 	self._webhooks = WeakCache({}, Webhook, self) -- used for audit logs
 	self._logger = Logger(options.logLevel, options.dateTime, options.logFile)
+	self._role_map = {}
+	self._emoji_map = {}
 	self._channel_map = {}
 end
 
 for name, level in pairs(logLevel) do
 	Client[name] = function(self, fmt, ...)
 		local msg = self._logger:log(level, fmt, ...)
-		if #self._listeners[name] > 0 then
-			return self:emit(name, msg or format(fmt, ...))
-		end
+		return self:emit(name, msg or format(fmt, ...))
 	end
 end
 
@@ -369,29 +369,16 @@ function Client:setGame(game)
 		game = {name = game, type = gameType.default}
 	elseif type(game) == 'table' then
 		if type(game.name) == 'string' then
-			if type(game.url) == 'string' then
-				game.type = gameType.streaming
-			else
-				game.type = gameType.default
+			if type(game.type) ~= 'number' then
+				if type(game.url) == 'string' then
+					game.type = gameType.streaming
+				else
+					game.type = gameType.default
+				end
 			end
 		else
 			game = null
 		end
-	else
-		game = null
-	end
-	self._presence.game = game
-	return updateStatus(self)
-end
-
-function Client:setActivity(t, name, url) -- NOTE: may not be the final version
-	local game
-	if type(t) == 'number' and type(name) == 'string' then
-		game = {
-			name = name,
-			type = t,
-			url = type(url) == 'string' and url or nil,
-		}
 	else
 		game = null
 	end
