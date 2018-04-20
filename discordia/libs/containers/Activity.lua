@@ -27,6 +27,14 @@ function Activity:_loadMore(data)
 	self._party_max = party and party.size and party.size[2]
 end
 
+function get.start(self)
+	return self._start
+end
+
+function get.stop(self)
+	return self._stop
+end
+
 function get.name(self)
 	return self._name
 end
@@ -39,24 +47,8 @@ function get.url(self)
 	return self._url
 end
 
-function get.start(self)
-		return self._start
-end
-
-function get.stop(self)
-	return self._stop
-end
-
-function get.sessionId(self)
-	return self._session_id
-end
-
-function get.syncId(self)
-	return self._sync_id
-end
-
-function get.flags(self)
-	return self._flags
+function get.applicationId(self)
+	return self._application_id
 end
 
 function get.state(self)

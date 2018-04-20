@@ -1,3 +1,5 @@
+[![Donate](https://img.shields.io/badge/Donate-PayPal-yellow.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=LLY5GMJHLZEGL&lc=US&item_name=Discordia&currency_code=USD&bn=PP%2dDonationsBF%3abtn_donate_SM%2egif%3aNonHosted)
+
 # Discordia
 
 **Discord API library written in Lua for the Luvit runtime environment**
@@ -10,7 +12,7 @@
 
 Discordia is a Lua wrapper for the official Discord API, and provides a high-level, object-oriented, event-driven interface for developing Discord bots. By using Lua's native coroutines, asynchronous HTTP and WebSocket communication is internally abstracted in a way that allows end-users to write blocking-style code without blocking I/O operations.
 
-Join the [Discord API community](https://discord.gg/0SBTUU1wZTWVpm07) to discuss Discordia and other Discord libraries!
+Join the [Discord API community](https://discord.gg/NKM3XmF) to discuss Discordia and other Discord libraries!
 
 ### Installation
 
@@ -57,7 +59,7 @@ Can I run this on a different Lua distribution?
 - The development and deployment of Discordia relies on the Luvit framework and its package manager. Porting Discordia and its dependencies to classic Lua or LuaJIT may be possible, but this is not a current project goal.
 
 How can I contribute?
-- Pull requests are welcomed, but please check with the library author before starting a major implementation. Contributions to the Wiki are helpful, too. If you would like to make a monetary contribution, please contact the library author.
+- Pull requests are welcomed, but please check with the library author before starting a major implementation. Contributions to the Wiki are helpful, too.
 
 Are there other Discord libraries?
 - Absolutely. Check the official [libraries](https://discordapp.com/developers/docs/topics/libraries) page of the Discord API documentation or the unofficial Discord API server linked above.
