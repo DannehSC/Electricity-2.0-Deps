@@ -1,3 +1,9 @@
+--[=[
+@c GuildCategoryChannel x GuildChannel
+@d Represents a channel category in a Discord guild, used to organize individual
+text or voice channels in that guild.
+]=]
+
 local GuildChannel = require('containers/abstract/GuildChannel')
 local FilteredIterable = require('iterables/FilteredIterable')
 local enums = require('enums')
@@ -10,6 +16,12 @@ function GuildCategoryChannel:__init(data, parent)
 	GuildChannel.__init(self, data, parent)
 end
 
+--[=[
+@m createTextChannel
+@p name string
+@r GuildTextChannel
+@d Creates a new GuildTextChannel with this category as it's parent. `Guild:createTextChannel(name)`
+]=]
 function GuildCategoryChannel:createTextChannel(name)
 	local guild = self._parent
 	local data, err = guild.client._api:createGuildChannel(guild._id, {
@@ -24,6 +36,12 @@ function GuildCategoryChannel:createTextChannel(name)
 	end
 end
 
+--[=[
+@m createVoiceChannel
+@p name string
+@r GuildVoiceChannel
+@d Creates a new GuildVoiceChannel with this category as it's parent. Similar to `Guild:createVoiceChannel(name)`
+]=]
 function GuildCategoryChannel:createVoiceChannel(name)
 	local guild = self._parent
 	local data, err = guild.client._api:createGuildChannel(guild._id, {
@@ -38,24 +56,28 @@ function GuildCategoryChannel:createVoiceChannel(name)
 	end
 end
 
+--[=[@p textChannels FilteredIterable Returns all textChannels in the Category]=]
+local _text_channels = setmetatable({}, {__mode = 'v'})
 function get.textChannels(self)
-	if not self._text_channels then
+	if not _text_channels[self] then
 		local id = self._id
-		self._text_channels = FilteredIterable(self._parent._text_channels, function(c)
+		_text_channels[self] = FilteredIterable(self._parent._text_channels, function(c)
 			return c._parent_id == id
 		end)
 	end
-	return self._text_channels
+	return _text_channels[self]
 end
 
+--[=[@p voiceChannels FilteredIterable Returns all voiceChannels in the Category]=]
+local _voice_channels = setmetatable({}, {__mode = 'v'})
 function get.voiceChannels(self)
-	if not self._voice_channels then
+	if not _voice_channels[self] then
 		local id = self._id
-		self._voice_channels = FilteredIterable(self._parent._voice_channels, function(c)
+		_voice_channels[self] = FilteredIterable(self._parent._voice_channels, function(c)
 			return c._parent_id == id
 		end)
 	end
-	return self._voice_channels
+	return _voice_channels[self]
 end
 
 return GuildCategoryChannel
