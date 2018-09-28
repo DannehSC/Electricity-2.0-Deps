@@ -1,3 +1,11 @@
+--[=[
+@c UserPresence x Container
+@d Abstract base class that defines the base methods and/or properties for
+classes that represent a user's current presence information. Note that any
+method or property that exists for the User class is also available in the
+UserPresence class and its subclasses.
+]=]
+
 local null = require('json').null
 local User = require('containers/User')
 local Activity = require('containers/Activity')
@@ -10,6 +18,11 @@ function UserPresence:__init(data, parent)
 	self._user = self.client._users:_insert(data.user)
 end
 
+--[=[
+@m __hash
+@r string
+@d Returns `UserPresence.user.id`
+]=]
 function UserPresence:__hash()
 	return self._user._id
 end
@@ -52,14 +65,17 @@ function get.gameURL(self)
 	return self._activity and self._activity._url
 end
 
+--[=[@p status string The user's online status (online, dnd, idle, offline).]=]
 function get.status(self)
 	return self._status or 'offline'
 end
 
+--[=[@p user User The user that this presence represents.]=]
 function get.user(self)
 	return self._user
 end
 
+--[=[@p activity Activity The Activity that this presence represents.]=]
 function get.activity(self)
 	return self._activity
 end

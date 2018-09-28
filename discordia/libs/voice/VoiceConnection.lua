@@ -1,6 +1,12 @@
+--[=[
+@c VoiceConnection
+@d Represents a connection to a Discord voice server.
+]=]
+
 local PCMString = require('voice/streams/PCMString')
 local PCMStream = require('voice/streams/PCMStream')
 local PCMGenerator = require('voice/streams/PCMGenerator')
+local FFmpegProcess = require('voice/streams/FFmpegProcess')
 
 local uv = require('uv')
 local ffi = require('ffi')
@@ -135,19 +141,43 @@ function VoiceConnection:_cleanup(err)
 	self:_continue(nil, err or 'connection closed')
 end
 
+--[=[
+@m getBitrate
+@r nil
+@d Returns the bitrate of the interal Opus encoder in bits per second (bps).
+]=]
 function VoiceConnection:getBitrate()
 	return self._encoder:get(opus.GET_BITRATE_REQUEST)
 end
 
+--[=[
+@m setBitrate
+@p bitrate number
+@r nil
+@d Sets the bitrate of the interal Opus encoder in bits per second (bps).
+This should be between 8000 and 128000, inclusive.
+]=]
 function VoiceConnection:setBitrate(bitrate)
 	bitrate = check(bitrate, MIN_BITRATE, MAX_BITRATE)
 	self._encoder:set(opus.SET_BITRATE_REQUEST, bitrate)
 end
 
+--[=[
+@m getComplexity
+@r number
+@d Returns the complexity of the interal Opus encoder.
+]=]
 function VoiceConnection:getComplexity()
 	return self._encoder:get(opus.GET_COMPLEXITY_REQUEST)
 end
 
+--[=[
+@m setComplexity
+@p complexity number
+@r nil
+@d Sets the complexity of the interal Opus encoder.
+This should be between 0 and 10, inclusive.
+]=]
 function VoiceConnection:setComplexity(complexity)
 	complexity = check(complexity, MIN_COMPLEXITY, MAX_COMPLEXITY)
 	self._encoder:set(opus.SET_COMPLEXITY_REQUEST, complexity)
@@ -187,14 +217,21 @@ function VoiceConnection:_play(stream, duration)
 	local pcm_len = frame_size * CHANNELS
 
 	local start = hrtime()
+	local reason
 
 	while elapsed < duration do
 
 		local pcm = stream:read(pcm_len)
-		if not pcm then break end
+		if not pcm then
+			reason = 'stream exhausted or errored'
+			break
+		end
 
 		local data, len = encoder:encode(pcm, pcm_len, frame_size, pcm_len * 2)
-		if not data then break end
+		if not data then
+			reason = 'could not encode audio data'
+			break
+		end
 
 		local s, t = self._s, self._t
 		local header = pack(HEADER_FMT, 0x80, 0x78, s, t, ssrc)
@@ -206,7 +243,10 @@ function VoiceConnection:_play(stream, duration)
 		self._t = t > MAX_TIMESTAMP and 0 or t
 
 		local encrypted, encrypted_len = sodium.encrypt(data, len, header .. PADDING, key)
-		if not encrypted then break end
+		if not encrypted then
+			reason = 'could not encrypt audio data'
+			break
+		end
 
 		local packet = header .. ffi_string(encrypted, encrypted_len)
 		udp:send(packet, ip, port)
@@ -225,7 +265,10 @@ function VoiceConnection:_play(stream, duration)
 			self._resumed = nil
 		end
 
-		if self._stopped then break	end
+		if self._stopped then
+			reason = 'stream stopped'
+			break
+		end
 
 	end
 
@@ -236,6 +279,8 @@ function VoiceConnection:_play(stream, duration)
 		self._stopped = nil
 	end
 
+	return elapsed, reason
+
 end
 
 function VoiceConnection:_setSpeaking(speaking)
@@ -243,6 +288,18 @@ function VoiceConnection:_setSpeaking(speaking)
 	return self._socket:setSpeaking(speaking)
 end
 
+--[=[
+@m playPCM
+@p source string/function/table/userdata
+@op duration number
+@r number, string
+@d Plays PCM data over the established connection. If a duration (in milliseconds)
+is provided, the audio stream will automatically stop after that time has elapsed;
+otherwise, it will play until the source is exhausted. The returned number is the
+time elapsed while streaming and the returned string is a message detailing the
+reason why the stream stopped. For more information about acceptable sources,
+see the [[voice]] page.
+]=]
 function VoiceConnection:playPCM(source, duration)
 
 	if not self._ready then
@@ -266,21 +323,40 @@ function VoiceConnection:playPCM(source, duration)
 
 end
 
+--[=[
+@m playFFmpeg
+@p path string
+@op duration number
+@r number, string
+@d Plays audio over the established connection using an FFmpeg process, assuming
+FFmpeg is properly configured. If a duration (in milliseconds)
+is provided, the audio stream will automatically stop after that time has elapsed;
+otherwise, it will play until the source is exhausted. The returned number is the
+time elapsed while streaming and the returned string is a message detailing the
+reason why the stream stopped. For more information about using FFmpeg,
+see the [[voice]] page.
+]=]
 function VoiceConnection:playFFmpeg(path, duration)
 
 	if not self._ready then
 		return nil, 'Connection is not ready'
 	end
 
-	local cmd = format('ffmpeg -i %q -ar %i -ac %i -f s16le pipe:1 -loglevel warning', path, SAMPLE_RATE, CHANNELS)
-	local source = assert(io.popen(cmd))
-	local stream = PCMStream(source)
+	local stream = FFmpegProcess(path, SAMPLE_RATE, CHANNELS)
 
-	self:_play(stream, duration)
-	source:close()
+	local elapsed, reason = self:_play(stream, duration)
+	stream:close()
+	return elapsed, reason
 
 end
 
+--[=[
+@m pauseStream
+@r nil
+@d Temporarily pauses the audio stream for this connection, if one is active.
+Like most Discordia methods, this must be called inside of a coroutine, as it
+will yield until the stream is actually paused, usually on the next tick.
+]=]
 function VoiceConnection:pauseStream()
 	if not self._speaking then return end
 	if self._paused then return end
@@ -288,6 +364,13 @@ function VoiceConnection:pauseStream()
 	return yield()
 end
 
+--[=[
+@m resumeStream
+@r nil
+@d Resumes the audio stream for this connection, if one is active and paused.
+Like most Discordia methods, this must be called inside of a coroutine, as it
+will yield until the stream is actually resumed, usually on the next tick.
+]=]
 function VoiceConnection:resumeStream()
 	if not self._speaking then return end
 	if not self._paused then return end
@@ -297,6 +380,13 @@ function VoiceConnection:resumeStream()
 	return yield()
 end
 
+--[=[
+@m stopStreap
+@r nil
+@d Irreversibly stops the audio stream for this connection, if one is active.
+Like most Discordia methods, this must be called inside of a coroutine, as it
+will yield until the stream is actually stopped, usually on the next tick.
+]=]
 function VoiceConnection:stopStream()
 	if not self._speaking then return end
 	if self._stopped then return end
@@ -305,7 +395,15 @@ function VoiceConnection:stopStream()
 	return yield()
 end
 
+--[=[
+@m close
+@r boolean
+@d Stops the audio stream for this connection, if one is active, disconnects from
+the voice server, and leaves the corresponding voice channel. Like most Discordia
+methods, this must be called inside of a coroutine.
+]=]
 function VoiceConnection:close()
+	self:stopStream()
 	if self._socket then
 		self._socket:disconnect()
 	end
@@ -313,6 +411,8 @@ function VoiceConnection:close()
 	return self._client._shards[guild.shardId]:updateVoice(guild._id)
 end
 
+--[=[@p channel GuildVoiceChannel/nil The corresponding GuildVoiceChannel for
+this connection, if one exists.]=]
 function get.channel(self)
 	return self._channel
 end
