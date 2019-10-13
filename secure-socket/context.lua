@@ -1,19 +1,14 @@
 --[[
-
 Copyright 2016 The Luvit Authors. All Rights Reserved.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-
     http://www.apache.org/licenses/LICENSE-2.0
-
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS-IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
 --]]
 local openssl = require('openssl')
 
@@ -27,9 +22,23 @@ else
 end
 local bit = require('bit')
 
-local DEFAULT_CIPHERS = 'ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:' .. -- TLS 1.2
-                        '!RC4:HIGH:!MD5:!aNULL:!EDH'                     -- TLS 1.0
+local DEFAULT_SECUREPROTOCOL
+do
+  local _, _, V = openssl.version()
+  local isLibreSSL = V:find('^LibreSSL')
 
+  _, _, V = openssl.version(true)
+  local isTLSv1_3 = not isLibreSSL and V > 0x10100000
+
+  if isTLSv1_3 then
+    DEFAULT_SECUREPROTOCOL = 'TLS'
+  else
+    DEFAULT_SECUREPROTOCOL = 'SSLv23'
+  end
+end
+local DEFAULT_CIPHERS = 'TLS_AES_128_GCM_SHA256:TLS_AES_128_CCM_SHA256:' .. --TLS 1.3
+                        'ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:' ..     --TLS 1.2
+                        'RC4:HIGH:!MD5:!aNULL:!EDH'                         --TLS 1.0
 local DEFAULT_CA_STORE
 do
   local data = assert(loadResource("./root_ca.dat"))
@@ -51,7 +60,7 @@ end
 
 return function (options)
   local ctx = openssl.ssl.ctx_new(
-    options.protocol or 'TLSv1_2',
+    options.protocol or DEFAULT_SECUREPROTOCOL,
     options.ciphers or DEFAULT_CIPHERS)
 
   local key, cert, ca
