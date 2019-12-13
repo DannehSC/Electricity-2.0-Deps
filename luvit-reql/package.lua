@@ -1,19 +1,16 @@
 return {
-	name = 'DannehSC/think-luvit',
-	version = '1.0.0',
-	homepage = 'https://github.com/DannehSC/luvit-reql',
+	name = "DannehSC/luvit-reql",
+	version = "1.0.8",
+	description = "A rethinkdb driver for Luvit, please send me a message if you need any assistance or extra features not currently present.",
+	tags = { "luvit", "rethinkdb", "database", "driver" },
+	license = "MIT",
+	author = {name = "DannehSC"},
+	homepage = "https://github.com/DannehSC/luvit-reql",
 	dependencies = {
-		'creationix/coro-net@3.0.0',
-		
+		'creationix/coro-net'
 	},
-	tags = {'luvit', 'rethinkdb'},
-	license = 'none',
-	authors = {
-		'DannehSC',
-		'SinisterRectus',
-		'kev1ns',
-		'JohnnyMorganz',
-		'Tigerism'
+	files = {
+		"**.lua",
+		"!test*"
 	}
-	files = {'**.lua'},
 }
